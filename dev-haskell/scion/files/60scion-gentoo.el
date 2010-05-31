@@ -20,5 +20,5 @@
 ;;
 ;; WARNING: This causes some versions of Emacs to fail so badly
 ;; that Emacs needs to be restarted.
-(setq scion-completing-read-function 'ido-completing-read)
+;; (setq scion-completing-read-function 'ido-completing-read)
 

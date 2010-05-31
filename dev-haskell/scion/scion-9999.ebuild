@@ -5,8 +5,8 @@
 EAPI="2"
 
 CABAL_FEATURES="bin lib profile haddock"
-EGIT_REPO_URI="http://github.com/greenrd/scion.git"
-EGIT_BRANCH="devel"
+EGIT_REPO_URI="http://github.com/JPMoresmau/scion.git"
+EGIT_BRANCH="master"
 
 inherit git haskell-cabal elisp-common
 
@@ -22,14 +22,15 @@ IUSE="doc profile hscolour emacs server"
 DEPEND=">=dev-lang/ghc-6.10
 	<dev-lang/ghc-6.13
 	=dev-haskell/ghc-paths-0.1*
-	=dev-haskell/ghc-syb-0.1*
+	dev-haskell/ghc-syb
+	dev-haskell/ghc-syb-utils
 	=dev-haskell/hslogger-1.0*
 	=dev-haskell/json-0.4*
 	>=dev-haskell/multiset-0.1
 	<dev-haskell/multiset-0.3
 	=dev-haskell/time-1.1*
-	>=dev-haskell/uniplate-1.2
-	=dev-haskell/list-tries-0.1*
+	dev-haskell/uniplate
+	dev-haskell/list-tries
 	=dev-haskell/binary-0.5*
 	server? ( =dev-haskell/network-bytestring-0.1*
 			  =dev-haskell/utf8-string-0.3* )
