@@ -5,7 +5,7 @@
 EAPI="2"
 
 CABAL_FEATURES="bin lib profile haddock"
-EGIT_REPO_URI="http://github.com/JPMoresmau/scion.git"
+EGIT_REPO_URI="http://github.com/bscottm/scion.git"
 EGIT_BRANCH="master"
 
 inherit git haskell-cabal elisp-common
@@ -32,6 +32,7 @@ DEPEND=">=dev-lang/ghc-6.10
 	dev-haskell/uniplate
 	dev-haskell/list-tries
 	=dev-haskell/binary-0.5*
+	>=dev-haskell/attojson-0.5.2
 	server? ( =dev-haskell/network-bytestring-0.1*
 			  =dev-haskell/utf8-string-0.3* )
 	emacs? ( app-editors/emacs )"
@@ -44,6 +45,7 @@ src_compile() {
 	if use server; then
 		CABAL_CONFIGURE_FLAGS="-f server"
 	fi
+	CABAL_BUILD_FLAGS="--ghc-option=-XDeriveDataTypeable"
 	cabal_src_compile
 
 	use emacs && elisp-compile emacs/scion.el

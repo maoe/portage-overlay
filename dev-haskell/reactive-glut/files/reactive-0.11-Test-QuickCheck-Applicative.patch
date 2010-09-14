@@ -1,0 +1,10 @@
+--- src/FRP/Reactive/Fun.hs.orig	2009-10-02 23:20:37.125758539 +0900
++++ src/FRP/Reactive/Fun.hs	2009-10-02 23:20:46.959771172 +0900
+@@ -41,7 +41,6 @@
+ import Test.QuickCheck
+ import Test.QuickCheck.Checkers
+ import Test.QuickCheck.Classes
+-import Test.QuickCheck.Applicative ()
+ 
+ import FRP.Reactive.Internal.Fun
+ 

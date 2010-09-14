@@ -1,0 +1,866 @@
+Fri Nov 27 23:14:28 GMT 2009  Duncan Coutts <duncan@haskell.org>
+  * Fix documentation of layoutGetExtents
+  Crucially it now says which is the ink and logical rectangles.
+  Also the variable names are now consistent with their uses.
+  No actual change in behaviour.
+
+Thu Dec 10 17:29:42 GMT 2009  Duncan Coutts <duncan@haskell.org>
+  * Handle installed package ids for ghc-6.12
+
+Thu Dec 10 18:10:07 GMT 2009  Duncan Coutts <duncan@haskell.org>
+  * Make c2hs read text files in latin1 encoding
+  The c2hs lexer cannot cope with code points over 255.
+  Fixes the ghc-6.12 build problem where it consumes all memory.
+
+Thu Dec 10 18:11:44 GMT 2009  Duncan Coutts <duncan@haskell.org>
+  * Disable c2hs support for C long double
+  The CLDouble type is missing in ghc-6.12, though it may return.
+  The Gtk+ headers do not use long double, so it's ok.
+
+Thu Dec 10 18:12:37 GMT 2009  Duncan Coutts <duncan@haskell.org>
+  * Remove leading space in FFI import names
+  ghc-6.12 complains about this.
+
+New patches:
+
+[Fix documentation of layoutGetExtents
+Duncan Coutts <duncan@haskell.org>**20091127231428
+ Ignore-this: 4a1178d41efc4062377e2ac83d8f585f
+ Crucially it now says which is the ink and logical rectangles.
+ Also the variable names are now consistent with their uses.
+ No actual change in behaviour.
+] {
+hunk ./gtk/Graphics/UI/Gtk/Pango/Layout.chs.pp 699
+ 	    if idx==maxBound then CursorPosNextPara else
+ 	    CursorPos (ofsFromUTF (fromIntegral idx) uc) (fromIntegral trail))
+ 
+--- | Compute the physical size of the layout.
++-- | Computes the logical and ink extents of the 'PangoLayout'.
+ --
+hunk ./gtk/Graphics/UI/Gtk/Pango/Layout.chs.pp 701
+--- * Computes the ink and the logical size of the 'Layout'. The
+---   logical extend is used for positioning, the ink size is the smallest
+---   bounding box that includes all character pixels. The ink size can be
+---   smaller or larger that the logical layout.
++-- Logical extents are usually what you want for positioning things. Note that
++-- both extents may have non-zero x and y. You may want to use those to offset
++-- where you render the layout. Not doing that is a very typical bug that
++-- shows up as right-to-left layouts not being correctly positioned in a
++-- layout with a set width.
+ --
+hunk ./gtk/Graphics/UI/Gtk/Pango/Layout.chs.pp 707
+-layoutGetExtents :: PangoLayout -> IO (PangoRectangle, PangoRectangle)
++-- Layout coordinates begin at the top left corner of the layout.
++--
++layoutGetExtents :: PangoLayout
++                 -> IO (PangoRectangle, PangoRectangle) -- ^ @(ink, logical)@
+ layoutGetExtents (PangoLayout _ pl) =
+hunk ./gtk/Graphics/UI/Gtk/Pango/Layout.chs.pp 712
+-  alloca $ \logPtr -> alloca $ \inkPtr -> do
+-  {#call unsafe layout_get_extents#} pl (castPtr logPtr) (castPtr inkPtr)
+-  log <- peek logPtr
+-  ink <- peek inkPtr
+-  return (fromRect log, fromRect ink)
++  alloca $ \inkPtr ->
++  alloca $ \logPtr -> do
++  {#call unsafe layout_get_extents#} pl (castPtr inkPtr) (castPtr logPtr)
++  log <- peek inkPtr
++  ink <- peek logPtr
++  return (fromRect ink, fromRect log)
+ 
+ 
+ -- | Compute the physical size of the layout.
+}
+[Handle installed package ids for ghc-6.12
+Duncan Coutts <duncan@haskell.org>**20091210172942
+ Ignore-this: 938eebcca1bc9f44581144e02d0237f5
+] {
+hunk ./acinclude.m4 101
+ fi
+ if echo "${C}" | ${GREP} $1 > /dev/null 2> /dev/null
+ then
+-	$2=$(for pkg in ${C} ; do echo "${pkg}" | sed -e 's/^[[A-Za-z0-9-]]*-\([[0-9.]]*\)$/\1/' ; done | sort -r -n | head -n1)
+-	AC_MSG_RESULT([yes, version $$2])
++	VER=$(for pkg in ${C} ; do echo "${pkg}" | sed -e 's/^[[A-Za-z0-9-]]*-\([[0-9.]]*\)$/\1/' ; done | sort -r -n | head -n1)
++	$2=${VER}
++	if test "${GHC_VERSION_612}" = "yes"; then
++		$3=$(${GHCPKG} field $1-${VER} id | cut -d' ' -f2)
++	else
++		$3=$1-${VER}
++	fi
++	AC_MSG_RESULT([yes, version ${VER}])
+ else
+ 	AC_MSG_ERROR([
+ Missing GHC package "$1". Install "$1" and re-run ./configure
+hunk ./cairo/cairo.package.conf.in 3
+ name: cairo
+ version: @PACKAGE_VERSION@
++id: cairo-@PACKAGE_VERSION@
+ license: BSD3
+ license-file: cairo/COPYRIGHT
+ copyright: (c) Paolo Martini 2005, (c) Abraham Egnor 2003, 2004, (c) Aetion Technologies LLC 2004
+hunk ./cairo/cairo.package.conf.in 19
+ extra-libraries: @CAIRO_LIBS_CQ@
+ include-dirs: @CAIRO_CFLAGS_CQ@
+ includes: @CAIRO_HEADERS@
+-depends: base-@PKG_BASE_VERSION@ mtl-@PKG_MTL_VERSION@ glib-@PACKAGE_VERSION@ @CAIRO_SPLITBASE_DEPENDS@
++depends: @PKG_BASE_ID@ @PKG_MTL_ID@ glib-@PACKAGE_VERSION@ @CAIRO_SPLITBASE_DEPENDS@
+ ld-options: @CAIRO_LIBEXTRA_CQ@
+hunk ./configure.ac 124
+   GHC_VERSION_610=yes, GHC_VERSION_610=no)
+ AM_CONDITIONAL(GHC_VERSION_610, test "$GHC_VERSION_610" = "yes")
+ 
++GTKHS_PROG_CHECK_VERSION($GHC_VERSION, -ge, 6.12,
++  GHC_VERSION_612=yes, GHC_VERSION_612=no)
++
+ dnl Calculate a version number with 3 digits (i.e. 502 for 5.2)
+ GHC_VERSION_NUMBER=`echo $GHC_VERSION | $SED "s/[[0-9]*\.\([0-9]]*\).*/0\1/"`
+ GHC_VERSION_NUMBER=`echo $GHC_VERSION_NUMBER | $SED "s/[[0-9]*\([0-9][0-9]]\)/\1/"`
+hunk ./configure.ac 240
+ 	   [AS_HELP_STRING([--with-pkgconf=FILE], [GHC package file to install packages])],
+ 	   [PKGCONF=$withval;],[PKGCONF=;])
+ 
++m4_pattern_allow([^PKG_])
+ 
+ dnl Check for various GHC packages:
+hunk ./configure.ac 243
+-GHC_PKG_CHECK(base,PKG_BASE_VERSION)
+-GTKHS_PROG_CHECK_VERSION($PKG_BASE_VERSION, -ge, 4.0,
+-AC_DEFINE(HAVE_NEW_CONTROL_EXCEPTION,[1],[Define if you have the new Control.Exception module (from GHC 6.10)]))
+-GHC_PKG_CHECK(haskell98,PKG_HASKELL98_VERSION)
+-GHC_PKG_CHECK(mtl,PKG_MTL_VERSION)
++GHC_PKG_CHECK(base,      [PKG_BASE_VERSION],      [PKG_BASE_ID])
++GHC_PKG_CHECK(haskell98, [PKG_HASKELL98_VERSION], [PKG_HASKELL98_ID])
++GHC_PKG_CHECK(mtl,       [PKG_MTL_VERSION],       [PKG_MTL_ID])
++if test "$HAVE_SPLIT_BASE" = "yes"; then
++	GHC_PKG_CHECK(bytestring, [PKG_BYTESTRING_VERSION], [PKG_BYTESTRING_ID])
++	GHC_PKG_CHECK(containers, [PKG_CONTAINERS_VERSION], [PKG_CONTAINERS_ID])
++	GHC_PKG_CHECK(array,      [PKG_ARRAY_VERSION],      [PKG_ARRAY_ID])
++	GHC_PKG_CHECK(old-time,   [PKG_OLDTIME_VERSION],    [PKG_OLDTIME_ID])
++	GHC_PKG_CHECK(pretty,     [PKG_PRETTY_VERSION],     [HSPKG_PRETTY_ID])
++
++	CAIRO_SPLITBASE_DEPENDS="${PKG_BYTESTRING_ID} ${PKG_ARRAY_ID}"
++	GTK_SPLITBASE_DEPENDS="${PKG_CONTAINERS_ID} ${PKG_ARRAY_ID}"
++	SOEGTK_SPLITBASE_DEPENDS="${PKG_OLDTIME_ID}"
++	GNOMEVFS_SPLITBASE_DEPENDS="${PKG_BYTESTRING_ID}"
++	GSTREAMER_SPLITBASE_DEPENDS="${PKG_BYTESTRING_ID}"
++fi
+ AC_SUBST(PKG_BASE_VERSION)
+ AC_SUBST(PKG_HASKELL98_VERSION)
+ AC_SUBST(PKG_MTL_VERSION)
+hunk ./configure.ac 262
+-if test "$HAVE_SPLIT_BASE" = "yes"; then
+-	GHC_PKG_CHECK(bytestring,PKG_BYTESTRING_VERSION)
+-	GHC_PKG_CHECK(containers, [PKG_CONTAINERS_VERSION])
+-	GHC_PKG_CHECK(array, [PKG_ARRAY_VERSION])
+-	CAIRO_SPLITBASE_DEPENDS="bytestring-${PKG_BYTESTRING_VERSION} array-${PKG_ARRAY_VERSION}"
+-	GHC_PKG_CHECK(old-time, [PKG_OLDTIME_VERSION])
+-	GHC_PKG_CHECK(pretty, [PKG_PRETTY_VERSION])
+-	GTK_SPLITBASE_DEPENDS="containers-${PKG_CONTAINERS_VERSION} array-${PKG_ARRAY_VERSION}"
+-	SOEGTK_SPLITBASE_DEPENDS="old-time-${PKG_OLDTIME_VERSION}"
+-	GNOMEVFS_SPLITBASE_DEPENDS="bytestring-${PKG_BYTESTRING_VERSION}"
+-	GSTREAMER_SPLITBASE_DEPENDS="bytestring-${PKG_BYTESTRING_VERSION}"
+-fi
+ AC_SUBST(PKG_BYTESTRING_VERSION)
+ AC_SUBST(PKG_CONTAINERS_VERSION)
+ AC_SUBST(PKG_ARRAY_VERSION)
+hunk ./configure.ac 267
+ AC_SUBST(PKG_OLDTIME_VERSION)
+ AC_SUBST(PKG_PRETTY_VERSION)
++
++AC_SUBST(PKG_BASE_ID)
++AC_SUBST(PKG_HASKELL98_ID)
++AC_SUBST(PKG_MTL_ID)
++AC_SUBST(PKG_BYTESTRING_ID)
++AC_SUBST(PKG_CONTAINERS_ID)
++AC_SUBST(PKG_ARRAY_ID)
++AC_SUBST(PKG_OLDTIME_ID)
++AC_SUBST(PKG_PRETTY_ID)
++
+ AC_SUBST(CAIRO_SPLITBASE_DEPENDS)
+ AC_SUBST(GTK_SPLITBASE_DEPENDS)
+ AC_SUBST(SOEGTK_SPLITBASE_DEPENDS)
+hunk ./configure.ac 283
+ AC_SUBST(GNOMEVFS_SPLITBASE_DEPENDS)
+ AC_SUBST(GSTREAMER_SPLITBASE_DEPENDS)
+ 
++GTKHS_PROG_CHECK_VERSION($PKG_BASE_VERSION, -ge, 4.0,
++AC_DEFINE(HAVE_NEW_CONTROL_EXCEPTION,[1],
++ [Define if you have the new Control.Exception module (from GHC 6.10)]))
++
+ dnl Check for the GTK&Co libraries. Use the special PKG_CHECK_MODULES
+ dnl macro from the pkg-config program.
+ PKG_CHECK_MODULES(GLIB,[glib-2.0 >= 2.0.0 gobject-2.0 >= 2.0.0], [], AC_MSG_ERROR([
+hunk ./gconf/gconf.package.conf.in 3
+ name: gconf
+ version: @PACKAGE_VERSION@
++id: gconf-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gconf/gconf.package.conf.in 17
+ extra-libraries: @GCONF_LIBS_CQ@
+ include-dirs: @GCONF_CFLAGS_CQ@
+ includes: gconf/gconf-client.h
+-depends: base-@PKG_BASE_VERSION@ glib-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ glib-@PACKAGE_VERSION@
+ ld-options: @GCONF_LIBEXTRA_CQ@
+hunk ./gio/gio.package.conf.in 3
+ name: gio
+ version: @PACKAGE_VERSION@
++id: gio-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gio/gio.package.conf.in 17
+ extra-libraries: @GIO_LIBS_CQ@
+ include-dirs: @GIO_CFLAGS_CQ@, "${pkglibdir}/include"
+ includes: gio/gio.h
+-depends: base-@PKG_BASE_VERSION@ glib-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ glib-@PACKAGE_VERSION@
+ ld-options: @GIO_LIBEXTRA_CQ@
+hunk ./glade/glade.package.conf.in 3
+ name: glade
+ version: @PACKAGE_VERSION@
++id: glade-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./glade/glade.package.conf.in 17
+ extra-libraries: @LIBGLADE_LIBS_CQ@
+ include-dirs: @LIBGLADE_CFLAGS_CQ@
+ includes: glade/glade.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @LIBGLADE_LIBEXTRA_CQ@
+hunk ./glib/glib.package.conf.in 3
+ name: glib
+ version: @PACKAGE_VERSION@
++id: glib-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./glib/glib.package.conf.in 17
+ extra-libraries: @GLIB_LIBS_CQ@
+ include-dirs: @GLIB_CFLAGS_CQ@, "${pkglibdir}/include"
+ includes: glib.h, glib-object.h
+-depends: base-@PKG_BASE_VERSION@
++depends: @PKG_BASE_ID@
+ ld-options: @GLIB_LIBEXTRA_CQ@
+hunk ./gnomevfs/gnomevfs.package.conf.in 3
+ name: gnomevfs
+ version: @PACKAGE_VERSION@
++id: gnomevfs-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LGPLv3
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gnomevfs/gnomevfs.package.conf.in 17
+ extra-libraries: @GNOMEVFS_LIBS_CQ@
+ include-dirs: @GNOMEVFS_CFLAGS_CQ@
+ includes: libgnomevfs/gnome-vfs.h libgnomevfs/gnome-vfs-mime.h
+-depends: glib-@PACKAGE_VERSION@ mtl-@PKG_MTL_VERSION@ @GNOMEVFS_SPLITBASE_DEPENDS@
++depends: glib-@PACKAGE_VERSION@ @PKG_MTL_ID@ @GNOMEVFS_SPLITBASE_DEPENDS@
+ ld-options: @GNOMEVFS_LIBEXTRA_CQ@
+hunk ./gstreamer/gstreamer.package.conf.in 3
+ name: gstreamer
+ version: @PACKAGE_VERSION@
++id: gstreamer-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gstreamer/gstreamer.package.conf.in 17
+ extra-libraries: @GSTREAMER_LIBS_CQ@
+ include-dirs: @GSTREAMER_CFLAGS_CQ@
+ includes: gst/gst.h
+-depends: glib-@PACKAGE_VERSION@ mtl-@PKG_MTL_VERSION@ @GSTREAMER_SPLITBASE_DEPENDS@
++depends: glib-@PACKAGE_VERSION@ @PKG_MTL_ID@ @GSTREAMER_SPLITBASE_DEPENDS@
+ ld-options: @GSTREAMER_LIBEXTRA_CQ@
+hunk ./gtk/gtk.package.conf.in 3
+ name: gtk
+ version: @PACKAGE_VERSION@
++id: gtk-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gtk/gtk.package.conf.in 17
+ extra-libraries: @GTK_LIBS_CQ@
+ include-dirs: @GTK_CFLAGS_CQ@
+ includes: gtk/gtk.h
+-depends: base-@PKG_BASE_VERSION@ mtl-@PKG_MTL_VERSION@ glib-@PACKAGE_VERSION@ @GTK_CAIRO_DEPEND@ @GTK_SPLITBASE_DEPENDS@
++depends: @PKG_BASE_ID@ @PKG_MTL_ID@ glib-@PACKAGE_VERSION@ @GTK_CAIRO_DEPEND@ @GTK_SPLITBASE_DEPENDS@
+ ld-options: @GTK_LIBEXTRA_CQ@
+hunk ./gtkglext/gtkglext.package.conf.in 3
+ name: gtkglext
+ version: @PACKAGE_VERSION@
++id: gtkglext-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gtkglext/gtkglext.package.conf.in 17
+ extra-libraries: @GTKGLEXT_LIBS_CQ@
+ include-dirs: @GTKGLEXT_CFLAGS_CQ@
+ includes: gtk/gtkgl.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @GTKGLEXT_LIBEXTRA_CQ@
+hunk ./gtksourceview2/gtksourceview2.package.conf.in 3
+ name: gtksourceview2
+ version: @PACKAGE_VERSION@
++id: gtksourceview2-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./gtksourceview2/gtksourceview2.package.conf.in 26
+           gtksourceview/gtksourcestyleschememanager.h,
+           gtksourceview/gtksourceview.h,
+           gtksourceview/gtksourceview-typebuiltins.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @GTKSOURCEVIEW2_LIBEXTRA_CQ@
+hunk ./mozembed/mozembed.package.conf.in 3
+ name: mozembed
+ version: @PACKAGE_VERSION@
++id: mozembed-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./mozembed/mozembed.package.conf.in 17
+ extra-libraries: @MOZEMBED_LIBS_CQ@
+ include-dirs: @MOZEMBED_CFLAGS_CQ@
+ includes: gtkmozembed.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @MOZEMBED_LIBEXTRA_CQ@
+hunk ./soegtk/soegtk.package.conf.in 3
+ name: soegtk
+ version: @PACKAGE_VERSION@
++id: soegtk-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./soegtk/soegtk.package.conf.in 14
+ import-dirs: "${pkglibdir}/imports/soegtk"
+ library-dirs: @GTK_LIBDIR_CQ@
+ hs-libraries: HSsoegtk
+-depends: base-@PKG_BASE_VERSION@ mtl-@PKG_MTL_VERSION@ gtk-@PACKAGE_VERSION@ @GTK_CAIRO_DEPEND@ @SOEGTK_SPLITBASE_DEPENDS@
++depends: @PKG_BASE_ID@ @PKG_MTL_ID@ gtk-@PACKAGE_VERSION@ @GTK_CAIRO_DEPEND@ @SOEGTK_SPLITBASE_DEPENDS@
+hunk ./sourceview/sourceview.package.conf.in 3
+ name: sourceview
+ version: @PACKAGE_VERSION@
++id: sourceview-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./sourceview/sourceview.package.conf.in 20
+           gtksourceview/gtksourcetag.h,
+           gtksourceview/gtksourceiter.h,
+ 	  gtksourceview/gtksourceview.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @SOURCEVIEW_LIBEXTRA_CQ@
+hunk ./svgcairo/svgcairo.package.conf.in 3
+ name: svgcairo
+ version: @PACKAGE_VERSION@
++id: svgcairo-@PACKAGE_VERSION@
+ license: BSD3
+ license-file: cairo/COPYRIGHT
+ copyright: (c) Duncan Coutts 2005, (c) Paolo Martini 2005
+hunk ./svgcairo/svgcairo.package.conf.in 19
+ extra-libraries: @SVGCAIRO_LIBS_CQ@
+ include-dirs: @SVGCAIRO_CFLAGS_CQ@
+ includes: librsvg/rsvg-cairo.h, librsvg/rsvg.h
+-depends: base-@PKG_BASE_VERSION@ mtl-@PKG_MTL_VERSION@ glib-@PACKAGE_VERSION@ cairo-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ @PKG_MTL_ID@ glib-@PACKAGE_VERSION@ cairo-@PACKAGE_VERSION@
+ ld-options: @SVGCAIRO_LIBEXTRA_CQ@
+hunk ./vte/vte.package.conf.in 3
+ name: vte 
+ version: @PACKAGE_VERSION@
++id: vte-@PACKAGE_VERSION@
+ license: LGPL
+ license-file: COPYING.LIB
+ maintainer: gtk2hs-users@lists.sourceforge.net
+hunk ./vte/vte.package.conf.in 17
+ extra-libraries: @VTE_LIBS_CQ@
+ include-dirs: @VTE_CFLAGS_CQ@
+ includes: vte/vte.h
+-depends: base-@PKG_BASE_VERSION@ gtk-@PACKAGE_VERSION@
++depends: @PKG_BASE_ID@ gtk-@PACKAGE_VERSION@
+ ld-options: @VTE_LIBEXTRA_CQ@
+}
+[Make c2hs read text files in latin1 encoding
+Duncan Coutts <duncan@haskell.org>**20091210181007
+ Ignore-this: 9edf2d4a79a63f95d20f435cad9e1303
+ The c2hs lexer cannot cope with code points over 255.
+ Fixes the ghc-6.12 build problem where it consumes all memory.
+] {
+hunk ./tools/c2hs/base/state/CIO.hs 1
++{-# LANGUAGE CPP #-}
++{-# OPTIONS_GHC -cpp #-}
+ --  Compiler Toolkit: Compiler I/O 
+ --
+ --  Author : Manuel M T Chakravarty
+hunk ./tools/c2hs/base/state/CIO.hs 78
+ import IO
+ import Directory
+ import System
++#if __GLASGOW_HASKELL__ >= 612
++import System.IO (hSetEncoding, latin1)
++#endif
+ 
+ import FileOps	 (fileFindIn, mktemp)
+ import StateBase (PreCST, liftIO)
+hunk ./tools/c2hs/base/state/CIO.hs 90
+ -- -------------
+ 
+ openFileCIO     :: FilePath -> IOMode -> PreCST e s Handle
+-openFileCIO p m  = liftIO (openFile p m)
++openFileCIO p m  = liftIO $ do
++  hnd <- openFile p m
++#if __GLASGOW_HASKELL__ >= 612
++  hSetEncoding hnd latin1
++#endif
++  return hnd
+ 
+ hCloseCIO   :: Handle -> PreCST e s ()
+ hCloseCIO h  = liftIO (hClose h)
+hunk ./tools/c2hs/base/state/CIO.hs 116
+ hPutStrLnCIO h s  = liftIO (hPutStrLn h s)
+ 
+ writeFileCIO		    :: FilePath -> String -> PreCST e s ()
+-writeFileCIO fname contents  = liftIO (writeFile fname contents)
++writeFileCIO fname contents  = do
++  hnd <- openFileCIO fname WriteMode
++  hPutStrCIO hnd contents
++  hCloseCIO hnd
+ 
+ readFileCIO       :: FilePath -> PreCST e s String
+hunk ./tools/c2hs/base/state/CIO.hs 122
+-readFileCIO fname  = liftIO (readFile fname)
++readFileCIO fname  = do
++  hnd <- openFileCIO fname ReadMode
++  liftIO (hGetContents hnd)
+ 
+ printCIO   :: Show a => a -> PreCST e s ()
+ printCIO a  = liftIO (print a)
+}
+[Disable c2hs support for C long double
+Duncan Coutts <duncan@haskell.org>**20091210181144
+ Ignore-this: 52ca68024ce3f3bc894cf14eb64630c6
+ The CLDouble type is missing in ghc-6.12, though it may return.
+ The Gtk+ headers do not use long double, so it's ok.
+] {
+hunk ./tools/c2hs/gen/CInfo.hs 123
+ size CULLongPT       = Storable.sizeOf (undefined :: CLLong)
+ size CFloatPT        = Storable.sizeOf (undefined :: CFloat)
+ size CDoublePT       = Storable.sizeOf (undefined :: CDouble)
+-size CLDoublePT      = Storable.sizeOf (undefined :: CLDouble)
++--size CLDoublePT      = Storable.sizeOf (undefined :: CLDouble)
+ size (CSFieldPT bs)  = -bs
+ size (CUFieldPT bs)  = -bs
+ 
+hunk ./tools/c2hs/gen/CInfo.hs 148
+ alignment CULLongPT       = Storable.alignment (undefined :: CULLong)
+ alignment CFloatPT        = Storable.alignment (undefined :: CFloat)
+ alignment CDoublePT       = Storable.alignment (undefined :: CDouble)
+-alignment CLDoublePT      = Storable.alignment (undefined :: CLDouble)
++--alignment CLDoublePT      = Storable.alignment (undefined :: CLDouble)
+ alignment (CSFieldPT bs)  = fieldAlignment bs
+ alignment (CUFieldPT bs)  = fieldAlignment bs
+ 
+}
+[Remove leading space in FFI import names
+Duncan Coutts <duncan@haskell.org>**20091210181237
+ Ignore-this: 742ed4c393cb770d5e0699030f3a4288
+ ghc-6.12 complains about this.
+] {
+hunk ./tools/c2hs/gen/GenBind.hs 732
+ --
+ foreignImport :: String -> String -> String -> Bool -> ExtType -> String
+ foreignImport header ident hsIdent isUnsafe ty  =
+-  "foreign import ccall " ++ safety ++ " \"" ++ header ++ " " ++ ident ++ 
++  "foreign import ccall " ++ safety ++ " \"" ++ entity ++
+   "\"\n  " ++ hsIdent ++ " :: " ++ showExtType ty ++ "\n"
+   where
+     safety = if isUnsafe then "unsafe" else "safe"
+hunk ./tools/c2hs/gen/GenBind.hs 736
++    entity | null header = ident
++           | otherwise   = header ++ " " ++ ident
+ 
+ -- produce a Haskell function definition for a fun hook
+ --
+}
+
+Context:
+
+[Use simpler embbeded demo replace previous one.
+Andy Stewart <lazycat.manatee@gmail.com>**20091126123239
+ Ignore-this: 51d2f4d8a44bc9a63ed3ce6e7f2f25e6
+] 
+[Remove debugging croft from demo.
+Axel Simon <Axel.Simon@ens.fr>**20091125102701] 
+[Apply renaming to gstreamer.
+Axel.Simon@ens.fr**20091124223444] 
+[Get rid of mkFunPtrDestroyNotify.
+Axel Simon <Axel.Simon@ens.fr>**20091124215744
+ This is a cleanup patch towards having all function that pass Haskell function
+ closures to C use cleanup functions that are mere C addresses. GObject now
+ no longer exports mkFunPtrDestroyNotify but two C function addresses that
+ free function and stable pointers, resp. This patch also fixes the
+ memory management in Clipboard which is a beast.
+ 
+] 
+[Use Gdk.EventM replace Gdk.Events, and make demo simpler.
+Andy Stewart <lazycat.manatee@gmail.com>**20091123031143
+ Ignore-this: b20fa6438a839a94aa5757eabe07e90c
+] 
+[Remove the use of weak reference from gstreamer.
+Axel.Simon@ens.fr**20091122222224
+ As a temporary hack I removed the code to clean up a function closure. The
+ old code relied on GWeakRef which has been removed from GObject due to
+ the GC being able to finalize GObjects directly which will make
+ GWeakRefs trigger callbacks into Haskell land form the unsafe GC.
+] 
+[Give correct name to the new Utils files in glib.
+Axel Simon <Axel.Simon@ens.fr>**20091122215334] 
+[Add another demo that uses callbacks. This was mainly to test if -threaded now works.
+Axel Simon <Axel.Simon@ens.fr>**20091122192920] 
+[Add a convenience function to extract the index of an iterator.
+Axel Simon <Axel.Simon@ens.fr>**20091122192837] 
+[Use the C function to finalize dynamic functions.
+Axel Simon <Axel.Simon@ens.fr>**20091122192828
+ 
+ This patch changes mkDestoryNotifyPtr to only return the address of the
+ ghc C function freeHaskellPtr. Thus, any closures passed to Gtk+
+ functions are now directly freed by a C function rather than calling
+ back into the Haskell system. The downside is that this C function does not
+ know which object to finalize. It is, however, called with the data that
+ is supposed to be passed to the callback function. This used to be
+ nullPtr since this argument was not used. To make things work,
+ this argument now always has to be the address of the callback function
+ so that freeHaskellPtr will get this address as a an argument.
+ If I forgot to change any uses of mkDestroyNotifyPtr, then using this
+ function will lead to a SEGFAULT since freeHaskellPtr is called with NULL.
+ Gtk2Hs programs producing a SEGFAULT when closing are an indication of this.
+ 
+] 
+[Move the weak reference function to disallow weak references from GObjects.
+Axel Simon <Axel.Simon@ens.fr>**20091122185255] 
+[Add finialization from the Gtk+ main loop.
+Axel Simon <Axel.Simon@ens.fr>**20091122120804
+ 
+ This patch adds a replaces the default destroy function for any GObject that
+ is created in Gtk+ or any libraries that use Gtk+. These objects are now
+ finalized using an idle handler that is executed by the Gtk+ main loop.
+ By being executed by the main loop, the finalizers are run from the same
+ thread as the main loop and, hence, the objects that hold Xlib or Win32
+ resources will now free these resources from the thread that normally
+ calls into Xlib/Win32. This fixes a problem with the -threaded runtime
+ of ghc in which finalization of objects could happen from other threads
+ which would cause Xlib errors.
+] 
+[Add a wrapper around the finalizer of Gtk objects.
+Axel.Simon@ens.fr**20091121132129] 
+[Add demon for cross-process embedded.
+Andy Stewart <lazycat.manatee@gmail.com>**20091121171221
+ Ignore-this: c8d6723ea37ea41bf293ab835a64ab4c
+] 
+[Fix the bug Duncan reported.
+Axel Simon <Axel.Simon@ens.fr>**20091121142249] 
+[Comment fixes.
+Axel Simon <Axel.Simon@ens.fr>**20091121142205] 
+[Add a demo for GtkBuilder.
+John Millikin <jmillikin@gmail.com>**20091120183943
+ Ignore-this: ff9747ed9a9245fdf867058750d9f6a7
+] 
+[Add support for GtkBuilder.
+John Millikin <jmillikin@gmail.com>**20091120183812
+ Ignore-this: baf53e703b8b16a6e9ab888c2795e22e
+] 
+[Add misssing property function and remove unnecessary export functions/comment from Embedding modules.
+Andy Stewart <lazycat.manatee@gmail.com>**20091117100846
+ Ignore-this: 9cb9f9de76b6a84f800c6dc52e6ce337
+] 
+[Remove deprecated signals, turn Window in to Maybe Window.
+Axel Simon <Axel.Simon@ens.fr>**20091117085016] 
+[Add support for get/set_prgname and get/set_application_name.
+John Millikin <jmillikin@gmail.com>**20091116194529
+ Ignore-this: 76c96d55ae04408764dca1c887af08b4
+] 
+[Add a forgotten dependency of Cairo on array.
+Axel Simon <Axel.Simon@ens.fr>**20091117082531] 
+[Update Graphics.UI.Gtk.Embedding modules to Gtk+ 2.18.3
+Andy Stewart <lazycat.manatee@gmail.com>**20091116145642
+ Ignore-this: d560619a2b3f3d5cb64ef2e794097fcb
+] 
+[Do not export functions that don't exist.
+Axel Simon <Axel.Simon@ens.fr>**20091116093910] 
+[Add new types for PixbufAnimation and Co.
+Axel Simon <Axel.Simon@ens.fr>**20091115203505] 
+[Bring AboutDialog up to date.
+Axel Simon <Axel.Simon@ens.fr>**20091115201408] 
+[AddGdkPixbufAnimation
+arsenm2@rpi.edu**20091114073747
+ Ignore-this: d5b7b2b309eff252143efb00af09863e
+] 
+[Add functions to Window.
+Axel Simon <Axel.Simon@ens.fr>**20091115193909] 
+[Swap the width and height parameters of the compositing function.
+Axel.Simon@ens.fr**20091115092525] 
+[Add the TreeModelFilter module and a demo.
+Axel.Simon@ens.fr**20091113231456] 
+[Add a name field to Attributes, whenever this is possible. Add a function to set the attributes of CellRenderer using ColumnIds, thereby allowing exactly the same column-based interface as Gtk does.
+Axel Simon <Axel.Simon@ens.fr>**20091113231319] 
+[Add yet another property for read access.
+Axel.Simon@ens.fr**20091112224538] 
+[Fix build problems of Cairo (dep on array package) and documentation.
+Axel.Simon@ens.fr**20091112224113] 
+[Make compile with Gtk+ 2.10
+Axel Simon <Axel.Simon@ens.fr>**20091112223802] 
+[Remove the two broken functions that were meant to interface Pixbuf and Cairo surfaces. Add an array access function for image surfaces so that pixel values can be copied manually.
+Axel.Simon@ens.fr**20091101181431] 
+[Fix C-side memory leaks in functions that take a GList
+Duncan Coutts <duncan@haskell.org>**20091031135849
+ Ignore-this: 8703764bb7a8314d9d7dd0ec5f42836e
+ The C functions do not take ownership of the GList (they make a copy)
+ It is the responsibility of the caller to allocate and free the GList.
+] 
+[Add Visual and Device to the type list.
+Axel.Simon@ens.fr**20091030165445] 
+[Remove internal signals in Notebook.
+Axel.Simon@ens.fr**20091026184338] 
+[Complete the Screen module and add the Display module.
+Axel.Simon@ens.fr**20091026184323] 
+[More fixed to get the new mk... functions to work.
+Axel.Simon@ens.fr**20091026184145] 
+[Fix gtkglext to use the new mk... functions.
+Axel.Simon@ens.fr**20091026175006] 
+[Fix more modules to use the new mk... functions.
+Axel.Simon@ens.fr**20091026174825] 
+[Import GObject into the File module.
+Axel.Simon@ens.fr**20091026164154] 
+[Fix various usages of the mk... functions.
+Axel.Simon@ens.fr**20091026162928] 
+[Fix construction of SVG objects to use new typles of constructor and destructor.
+Axel.Simon@ens.fr**20091026162810] 
+[Change the way objects are destructed.
+Axel.Simon@ens.fr**20091026162357] 
+[Fix the Gst hierarchy.
+Axel.Simon@ens.fr**20091026155328
+ The gstreamer modules used a different hierarchy for their objects which meant that they were not interchangeable with the GObject-rooted hierarchy. There still exists a MiniHierarchy for the light-weight objects of gstreamer but they are now created using the same utility in tools/hierarchyGen.
+] 
+[Streamline the types generated for gstreamer by removing the adapted type generator and generalizing the exiting one.
+Axel.Simon@ens.fr**20090512213627] 
+[Add an option to c2hs to wrap each call in a locking operation.
+Axel.Simon@ens.fr**20090512213527] 
+[Extend the type hierarchy generator to allow for re-exporting of modules and to emit mk... functions that contain Haskell constructor and a C destructor function.
+Axel.Simon@ens.fr**20090510075921] 
+[Complete the Screen object.
+Axel Simon <Axel.Simon@ens.fr>**20091022175931] 
+[Bring apiGen up to scratch.
+Axel Simon <Axel.Simon@ens.fr>**20091022094936
+ This patch tries to fix the apiGen utility to at least run with the latest
+ Gtk versions. There are still some flaws in the Makefile which is mainly due
+ to me not understanding how it is all supposed to work. I have changed the
+ paths from which files are downloaded which might have been a bit over-
+ zealous. Furthermore, I do not understand how Gdk modules were supposed
+ to be generated as this should be a side-effect of generating the Gtk
+ modules. The patch also addresses some changes in the structure of the
+ documentation xml files.
+ 
+] 
+[Add notes that how to function `windowSetTransientFor` with fullscreen-window.
+Andy Stewart <lazycat.manatee@gmail.com>**20091012123621
+ Ignore-this: 3ba0f2b28b10b027088697639198dc98
+] 
+[UncommentGValueCharFunctions
+arsenm2@rpi.edu**20091010214130
+ Ignore-this: 40983acf515caedccf561ebb50bd927a
+] 
+[Create Windows/Invisible.chs.pp (GtkInvisible) and fix docs of Notebook.chs.pp.
+Andy Stewart <lazycat.manatee@gmail.com>**20091008005744
+ Ignore-this: 953ca96f67b460d57b083d3409af0587
+] 
+[Update modules (Dialog, Label, Notebook) to Gtk+ 2.16 and fix docs in previous patch.
+Andy Stewart <lazycat.manatee@gmail.com>**20091007153405
+ Ignore-this: 9b7858f831226301fbc0493a8de4c820
+] 
+[Update Multiline modules signals and Update Window/WindowGroup modules to Gtk+ 2.16
+Andy Stewart <lazycat.manatee@gmail.com>**20091006120659
+ Ignore-this: 31d7c20ba557bed65a92d6c9adb2d883
+] 
+[Update all modules under Graphics.UI.Gtk.Multiline to Gtk+ 2.16.
+Andy Stewart <lazycat.manatee@gmail.com>**20091001073008
+ Ignore-this: c9bd81bdac9f9c0f6d7ecad79dda5857
+] 
+[Contain stub.o file in Makefile.am for generate Vte.chs.pp dynamic callback.
+Andy Stewart <lazycat.manatee@gmail.com>**20090929121858
+ Ignore-this: d8db4a67742a1fe4dd965b38aaffc970
+] 
+[Add signal connection function for VTE.
+Axel.Simon@ens.fr**20090929070027] 
+[Add the dragFailed signal.
+Axel.Simon@ens.fr**20090928193224] 
+[Fix documentation and some memory management stuff in VTE.
+Axel.Simon@ens.fr**20090928193201] 
+[Adjust VTE binding and finish miss functions in GdkCursor
+Andy Stewart <lazycat.manatee@gmail.com>**20090928013208
+ Ignore-this: 782feb53e623e3af75564e6533e0e0e0
+ * Adjust configure.ac make VTE binding 0.20.5 or higher
+ * Finish missing functions in Vte.chs.pp
+ ** terminalGetTextIncludeTrailingSpaces
+ ** terminalGetTextRange
+ ** terminalMatchSetCursorType   (this function need GdkCursorType that miss in current Cursor.chs)
+ * Remove all deprecated functions in VTE 0.20.5
+ * Adjust export list of Vte.chs.pp
+ * Adjust comment of Vte.chs.pp, make it more Haskell style
+ * Finish miss functions of Cursor.chs
+] 
+[Finish two more functions in VTE.
+Axel.Simon@ens.fr**20090926135654] 
+[Binding for VTE 2.0 library
+Andy Stewart <lazycat.manatee@gmail.com>**20090925003444
+ Ignore-this: 4d04c0c8aeddbc984358b55dd54843ec
+] 
+[Add some more new signals.
+Axel.Simon@ens.fr**20090924173347] 
+[Add the dragStatus function and more comments.
+Axel.Simon@ens.fr**20090910211908] 
+[Make path conversion function safe as it may call back.
+Axel.Simon@ens.fr**20090828073418] 
+[Update status in AUTHORS file to reflect reality
+Duncan Coutts <duncan@haskell.org>**20090822005908
+ Ignore-this: e8d4122f02b53c63f8cf22acbd9826ce
+] 
+[Jhbuild modules file for use on OSX
+Hamish Mackenzie <hamish@firestream.co.uk>**20090719093602
+ Ignore-this: 19f10ea07de49ab9fae269c0a1fcd899
+] 
+[Fix reference counting for GObjects.
+Axel.Simon@ens.fr**20090720190441
+ This bug is only present in Glib libraries >2.10 which introduced floating
+ references. The problem is that even GObjects have always a floating
+ reference which has to be turned into a permanent reference. So far,
+ we omitted this call which had the effect that we would keep the object
+ around with a floating reference. Some objects in Gtk will call ref_sink
+ on an object that is passed to them, rather than ref. This causes the
+ floating reference to be turned into a proper one, rather than adding a new
+ reference. Thus, when the Haskell GC comes along, the object is unref'd and
+ destroyed while it's still being held in the Gtk object. This patch always
+ ref_sinks the object, resulting in a proper refence being held by Haskell
+ and forcing every ref_sink in Gtk code to have the semantics of ref.
+] 
+[Add a comment to Notebook's setCurrentPage function.
+Axel Simon <Axel.Simon@ens.fr>**20090611074238] 
+[Makefile.am: remove slashes after DESTDIR (fixes trac #1160)
+pgavin@gmail.com**20090510180614
+ Ignore-this: 5c57aa6375618d627e7568303a36abdd
+] 
+[TAG 0.10.1
+pgavin@gmail.com**20090510160214] 
+[configure.ac: bump version to 0.10.1
+pgavin@gmail.com**20090429032110
+ Ignore-this: 682c3f529251a07b3de0761729af5eeb
+] 
+[Bind GtkObject's destroy signal
+m.niloc@gmail.com**20090430152124
+ Ignore-this: b67612a0e13a5cabc2c3392cb78fadaf
+] 
+[Add missing export of Click(..) data type, repoted by Ben Franksen.
+Axel.Simon@ens.fr**20090509184414] 
+[Input method bindings
+m.niloc@gmail.com**20090504191302
+ Ignore-this: e8cbd55f0519ab413b24cae7b99d7b3d
+] 
+[Improve apiGen names, for example hsv instead of hSV
+m.niloc@gmail.com**20090430152250
+ Ignore-this: 89e23bb8809006e40a3708049de9c031
+] 
+[gtk/Graphics/UI/Gtk/General/Structs.hsc: Accept responses 0 and smaller than -11.
+Marco Túlio Gontijo e Silva <marcot@holoscopio.com>**20090507111848
+ Ignore-this: f64b69b52a743ac54b404452178b29c0
+] 
+[Add a function to insert the current clipboard content at the current cursor.
+Axel Simon <Axel.Simon@ens.fr>**20090424152430] 
+[configure.ac: add bz2 dist tarball
+pgavin@gmail.com**20090429034820
+ Ignore-this: 5dfb2e2e91ab8b991d6908c7c08a51fe
+] 
+[gtk: OwnerChange event only since gtk 2.6
+pgavin@gmail.com**20090429032134
+ Ignore-this: 23e3be727b8d43711321accaf35a4bf6
+] 
+[Fix drawWindowGetPointer, trac #802.
+Axel.Simon@ens.fr**20090427194638] 
+[Add an Eq instance for all objects.
+Axel.Simon@ens.fr**20090426153152
+ This patch makes it possible to use == to compare two objects or, rather,
+ their pointers. Since for one case an object is merely containing data
+ and has its own Eq instance, it was necessary to add a 'noEq' flag to
+ the type generator that, when given, prevents the generation of the
+ deriving Eq clause. This patch fixes trac #1158.
+] 
+[New version of carsim demo
+mauricio.antunes@gmail.com**20090410234420
+ It has been a couple years since I wrote what is now the
+ 'carsim' gtk2hs demo. I realized many of gtk+, gtk2hs and ghc
+ user library have been deprecated and replaced since then.
+ As it's in a demo directory, I thought it would be better to
+ have an updated version using current recomended API. Except
+ for a 'Pause' button, nothing important has changed in the user
+ interface. Changes in code include:
+ 
+ - Deprecated code, like System.Time and a few of gtk2hs, has
+ been replaced.
+ 
+ - Bug fix in about dialog.
+ 
+ - Use of EventM.
+ 
+ - Code is now UTF-8, but that only affects author name.
+ 
+ - Hopefully, better code and documentation.
+] 
+[gtk: allow zero as argument to toResponse in G.U.G.General.Structs
+pgavin@gmail.com**20090424152136
+ Ignore-this: 922761ff9383f47f6efc030377241316
+] 
+[Unregister packages in reverse order to avoid dependency conflict.
+Axel Simon <Axel.Simon@ens.fr>**20090424144710] 
+[Makefile.am: add package dependencies to haddock command line
+pgavin@gmail.com**20090424022757
+ Ignore-this: 4bbe2fde77816e01e7b8be81863cb234
+] 
+[Correct arguments of a finally statement.
+Axel Simon <Axel.Simon@ens.fr>**20090417143511
+ This code has obviously never been tested. Thanks to Bertram Felgenhauer to spot this.
+] 
+[Adapt demo to use new Exception module.
+Axel Simon <Axel.Simon@ens.fr>**20090417142437] 
+[Add 'clean-all' option to tools/apiGen/Makefile
+mauricio.antunes@gmail.com**20090409024158
+ This adds a 'clean-all' option to apiGen's make
+ file. It will erase everything not on the original
+ distribution. This may be usefull if we are
+ testing different versions of packages, and need
+ to remove tarballs between tests.
+] 
+[gio: Avoid calling (freeHaskellFunPtr nullFunPtr).
+Bertram Felgenhauer <int-e@gmx.de>**20090407084617] 
+[Make explicit use of concurrent finalizers.
+Axel Simon <Axel.Simon@ens.fr>**20090327110603
+ This patch acounts for the change of semantics that finalizers undergo with
+ the release of GHC 6.10.1. Specifcially, finalizers are now by default
+ run during garbage collection, making it impossible to have them call back
+ to Haskell land. This patch uses functions that specifically schedule any
+ finilizers to be run as new threads once the mutator springs back to life.
+] 
+[Add eventClick to EventM
+Hamish Mackenzie <hamish@firestream.co.uk>**20090307080530
+ Ignore-this: ff7b605b58d6021248f9951b4c641209
+] 
+[Fix documentation.
+Axel.Simon@ens.fr**20090217180909] 
+[TAG 0.10.0
+Peter Gavin <pgavin@gmail.com>**20090207054815] 
+Patch bundle hash:
+11298a5159b34bf420af4a66cd5e9bbf3a113a0e

@@ -1,0 +1,11 @@
+--- type-level-0.2.3/type-level.cabal.org	2009-11-25 13:57:10.281612537 +0900
++++ type-level-0.2.3/type-level.cabal	2009-11-25 13:57:17.974380977 +0900
+@@ -43,7 +43,7 @@
+ 
+ -- depends on ghc due to the use of infix type constructors and template haskell
+ Library
+-  build-depends:   base >=3 && <5, template-haskell > 2.0
++  build-depends:   base >=3 && <5, template-haskell > 2.0, syb
+   hs-source-dirs:  src
+   exposed-modules: Data.TypeLevel,
+                    Data.TypeLevel.Bool,
